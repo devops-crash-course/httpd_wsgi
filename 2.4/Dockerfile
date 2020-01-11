@@ -21,8 +21,9 @@ RUN set -eux; \
 	rm -rf /var/lib/apt/lists/*
 
 ENV HTTPD_VERSION 2.4.41
+ENV WSGI_VERSION 4.7.0
 ENV HTTPD_SHA256 133d48298fe5315ae9366a0ec66282fa4040efa5d566174481077ade7d18ea40
-
+ENV WSGI_SHA256 764c70c5d4ee6293633ca7386a1276d05c24132d53c976dab0a64920fc252e1d
 # https://httpd.apache.org/security/vulnerabilities_24.html
 ENV HTTPD_PATCHES=""
 
@@ -48,7 +49,10 @@ RUN set -eux; \
 		libpcre3-dev \
 		libssl-dev \
 		libxml2-dev \
+		python-dev \
 		make \
+		automake \
+		autoconf \
 		wget \
 		zlib1g-dev \
 	; \
@@ -75,8 +79,22 @@ RUN set -eux; \
 		[ -n "$success" ]; \
 	}; \
 	\
+	dwsgi() { \
+		local f="$1"; shift; \
+		local distFile="$1"; shift; \
+		local success=; \
+		local distUrl=https://github.com/GrahamDumpleton/mod_wsgi/releases; \
+		if wget -O "$f" "$distUrl$distFile" && [ -s "$f" ]; then \
+			success=1; \
+			break; \
+		fi; \
+		[ -n "$success" ]; \
+	}; \
+	\
 	ddist 'httpd.tar.bz2' "httpd/httpd-$HTTPD_VERSION.tar.bz2"; \
+	dwsgi 'mod_wsgi.tar.gz' "$WSGI_VERSION.tar.gz"; \
 	echo "$HTTPD_SHA256 *httpd.tar.bz2" | sha256sum -c -; \
+	echo "$WSGI_SHA256 *mod_wsgi.tar.gz" | sha256sum -c -; \
 	\
 # see https://httpd.apache.org/download.cgi#verify
 	ddist 'httpd.tar.bz2.asc' "httpd/httpd-$HTTPD_VERSION.tar.bz2.asc"; \
@@ -141,6 +159,10 @@ RUN set -eux; \
 		"$HTTPD_PREFIX/conf/extra/httpd-ssl.conf" \
 	; \
 	\
+	tar xvfz mod_wsgi.tar.gz -C mod_wsgi; \
+	cd mod_wsgi; \
+	./configure --with-python=/usr/bin/python --with-apxs=$HTTPD_PREFIX/bin/apxs; \
+	make; make install; \
 # reset apt-mark's "manual" list so that "purge --auto-remove" will remove all build dependencies
 	apt-mark auto '.*' > /dev/null; \
 	[ -z "$savedAptMark" ] || apt-mark manual $savedAptMark; \
